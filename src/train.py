@@ -5,6 +5,7 @@ from tqdm import tqdm
 import tensorflow as tf
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.losses import BinaryCrossentropy
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 # Import custom model and utilities from model.py
 from model import AutoIntPlus, test_model, get_NDCG, get_hit_rate
@@ -66,7 +67,7 @@ def main():
     # =========================================================
     print(f"Starting Training for {epochs} epochs...")
     train_features = train_df[u_i_feature + meta_features].values
-    train_labels = train_df[label].values
+    train_labels = train_labels = train_df[label].values.reshape(-1, 1)
 
     model.fit(
         x=train_features, 

@@ -3,6 +3,10 @@
 본 프로젝트는 고객의 안정적인 만족과 플랫폼 체류 시간 증가를 최우선으로 고려한 영화 추천 시스템입니다.    
 넷플릭스의 CEE(Continuous Explore Exploit) 프레임워크를 바탕으로, "사용자가 싫어할 만한 것은 추천하지 않는다(Do No Harm)"는 철학을 시스템 전반에 구현했습니다.
 
+![](assets/user12-past.png)
+
+![](assets/user12-jan-2000.png)
+
 ## 1. Dataset & Preprocessing
 
 * **데이터셋:** [MovieLens 1M Dataset](https://grouplens.org/datasets/movielens/1m/)

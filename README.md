@@ -86,6 +86,9 @@ AutoInt+는 피처 간의 복잡한 상호작용을 포착하는 데 탁월하�
 이번 프로젝트에서는 추천 로직의 편향성을 사후에 보정하는 방식을 이용했습니다. 앞으로 더 발전시켜보고 싶은 방향은, 모델 학습 전 단계에서부터 데이터 불균형을 해결하는 것입니다. 샘플링 기법 고도화나 손실 함수 조정을 통해, Long-tail 데이터에서 편향 없이 작동하는 모델을 구현해볼 예정입니다.
 
 ## 8. References
-[AutoInt: Automatic Feature Interaction Learning via Self-Attentive Neural Networks](https://arxiv.org/abs/1810.11921)     
-[5 Things We Have Learned From Continuous Explore Exploit Applications at Netflix](https://staging6.odsc.com/speakers/5-things-we-have-learned-from-continuous-explore-exploit-applications-at-netflix/)     
-[Autoint code](https://github.com/DeepGraphLearning/RecommenderSystems)     
+
+Song, W., Shi, C., Xiao, Z., Duan, Z., Xu, Y., Zhang, M., & Tang, J. (2019). AutoInt: Automatic feature interaction learning via self-attentive neural networks. In *Proceedings of the 28th ACM International Conference on Information and Knowledge Management* (pp. 1161–1170). https://arxiv.org/abs/1810.11921
+
+Liu, S. (2020). *5 things we have learned from continuous explore exploit applications at Netflix* [Conference presentation]. Open Data Science Conference (ODSC). https://staging6.odsc.com/speakers/5-things-we-have-learned-from-continuous-explore-exploit-applications-at-netflix/
+
+Song, W., Shi, C., Xiao, Z., Duan, Z., Xu, Y., Zhang, M., & Tang, J. (2019). *AutoInt* [Source code]. GitHub. https://github.com/DeepGraphLearning/RecommenderSystems

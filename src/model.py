@@ -4,18 +4,15 @@ import tensorflow as tf
 from tensorflow.keras import Model
 from tensorflow.keras.layers import Layer, Dense, Flatten, Dropout, BatchNormalization, Embedding
 
-# ==============================================================================
-# 1. Feature Embedding Layer
-# ==============================================================================
+
+# Feature Embedding Layer
 class FeatureEmbedding(Layer):
-    """
-    Translates sparse categorical features into dense embedding vectors.
-    """
+    """sparse categorical feature를 dense embedding vector로 변환한다."""
     def __init__(self, field_dims, embed_dim, **kwargs):
         super(FeatureEmbedding, self).__init__(**kwargs)
         self.total_features = sum(field_dims)
         self.embed_dim = embed_dim
-        # Calculate offsets to map categorical values to a single continuous space
+        # categorical 값을 하나의 연속된 index 공간으로 매핑하기 위한 offset
         self.offsets = tf.constant(
             np.array((0, *np.cumsum(field_dims)[:-1]), dtype=np.int32), dtype=tf.int32
         )
@@ -23,18 +20,14 @@ class FeatureEmbedding(Layer):
 
     def call(self, inputs):
         # inputs shape: (batch_size, num_fields)
-        # Shift indices using offsets to prevent overlap between different fields
+        # offset을 더해 field 간 index가 겹치지 않게 이동시킨다
         shifted_inputs = tf.cast(inputs, tf.int32) + self.offsets
-        return self.embedding(shifted_inputs) # Output shape: (batch_size, num_fields, embed_dim)
+        return self.embedding(shifted_inputs)  # 출력 shape: (batch_size, num_fields, embed_dim)
 
 
-# ==============================================================================
-# 2. Deep Neural Network (MLP)
-# ==============================================================================
+# Deep Neural Network (MLP)
 class MultiLayerPerceptron(Layer):
-    """
-    Standard Feedforward Neural Network (DNN track) to learn implicit high-order interactions.
-    """
+    """고차 implicit interaction을 학습하는 DNN track."""
     def __init__(self, hidden_units, dropout_rate=0.2, use_bn=False, **kwargs):
         super(MultiLayerPerceptron, self).__init__(**kwargs)
         self.use_bn = use_bn
@@ -42,14 +35,14 @@ class MultiLayerPerceptron(Layer):
         self.bn_layers = []
         self.dropouts = []
 
-        # Construct stacked Dense layers
+        # Dense layer를 쌓아 구성
         for units in hidden_units:
             self.dense_layers.append(Dense(units, activation='relu'))
             if self.use_bn:
                 self.bn_layers.append(BatchNormalization())
             self.dropouts.append(Dropout(dropout_rate))
-            
-        # Final output layer for MLP track (outputs a single scalar score)
+
+        # MLP track의 최종 출력층 (scalar score 하나를 출력)
         self.output_layer = Dense(1, activation=None)
 
     def call(self, inputs, training=False):
@@ -62,142 +55,126 @@ class MultiLayerPerceptron(Layer):
         return self.output_layer(x)
 
 
-# ==============================================================================
-# 3. Multi-Head Self-Attention (The core of AutoInt)
-# ==============================================================================
+# Multi-Head Self-Attention (AutoInt의 핵심)
 class InteractingLayer(Layer):
-    """
-    Multi-Head Self-Attention layer based on the AutoInt paper.
-    Learns explicit combinations of different features.
-    """
+    """AutoInt 논문 기반 Multi-Head Self-Attention layer. feature 간 explicit 조합을 학습한다."""
     def __init__(self, embed_dim, num_heads, use_residual=True, **kwargs):
         super(InteractingLayer, self).__init__(**kwargs)
         self.num_heads = num_heads
         self.embed_dim = embed_dim
         self.use_residual = use_residual
-        
-        # Dimensions for each attention head
-        self.head_dim = embed_dim // num_heads 
+
+        # attention head 하나당 차원
+        self.head_dim = embed_dim // num_heads
         assert self.head_dim * num_heads == embed_dim, "embed_dim must be divisible by num_heads"
 
-        # Keras built-in MultiHeadAttention is highly optimized and standard for this operation
+        # Keras 내장 MultiHeadAttention 사용
         self.attention = tf.keras.layers.MultiHeadAttention(
-            num_heads=self.num_heads, 
+            num_heads=self.num_heads,
             key_dim=self.head_dim
         )
-        
-        # Residual connection projection (if needed to match dimensions)
+
+        # 차원을 맞추기 위한 residual connection projection
         if self.use_residual:
             self.res_dense = Dense(embed_dim, use_bias=False)
 
     def call(self, inputs, training=False):
-        # Apply Self-Attention: Query, Key, and Value are derived from the same inputs
+        # query, key, value를 같은 input에서 뽑아 self-attention 적용
         attended_features = self.attention(
             query=inputs, value=inputs, key=inputs, training=training
         )
-        
-        # Apply residual connection if enabled
+
+        # residual connection 적용
         if self.use_residual:
             residual = self.res_dense(inputs)
             attended_features = attended_features + residual
-            
+
         return tf.nn.relu(attended_features)
 
 
-# ==============================================================================
-# 4. Joint Model: AutoInt+ (Combining Attention and MLP)
-# ==============================================================================
+# Joint Model: AutoInt+ (Attention과 MLP 결합)
 class AutoIntPlus(Model):
-    """
-    The complete AutoInt+ Model connecting the Embedding, Attention, and DNN tracks.
-    """
-    def __init__(self, field_dims, embed_dim=16, att_layers=3, num_heads=2, 
+    """Embedding, Attention, DNN track을 연결한 전체 AutoInt+ 모델."""
+    def __init__(self, field_dims, embed_dim=16, att_layers=3, num_heads=2,
                  mlp_hidden_units=(32, 32), dropout=0.2, **kwargs):
         super(AutoIntPlus, self).__init__(**kwargs)
-        
+
         self.num_fields = len(field_dims)
         self.embed_dim = embed_dim
-        
-        # 1. Embedding Component
+
+        # embedding 구성 요소
         self.embedding = FeatureEmbedding(field_dims, embed_dim)
-        
-        # 2. Attention Component (AutoInt track)
+
+        # attention 구성 요소 (AutoInt track)
         self.attention_layers = [InteractingLayer(embed_dim, num_heads) for _ in range(att_layers)]
-        self.attention_output = Dense(1, activation=None) # Projects attention output to scalar score
-        
-        # 3. DNN Component (MLP track)
+        self.attention_output = Dense(1, activation=None)  # attention 출력을 scalar score로 projection
+
+        # DNN 구성 요소 (MLP track)
         self.mlp = MultiLayerPerceptron(mlp_hidden_units, dropout_rate=dropout)
 
     def call(self, inputs, training=False):
-        # Step 1: Embed the sparse categorical inputs
+        # sparse categorical input을 embedding
         emb_features = self.embedding(inputs)
-        
-        # Step 2: Pass through the Attention Track (AutoInt)
+
+        # attention track(AutoInt) 통과
         att_x = emb_features
         for layer in self.attention_layers:
-            att_x = layer(att_x, training=training) 
-            
+            att_x = layer(att_x, training=training)
+
         att_x = Flatten()(att_x)
         att_score = self.attention_output(att_x)
-        
-        # Step 3: Pass through the DNN Track (MLP)
+
+        # DNN track(MLP) 통과
         mlp_input = Flatten()(emb_features)
         mlp_score = self.mlp(mlp_input, training=training)
-        
-        # Step 4: Combine logits and apply Sigmoid for the final prediction
+
+        # 두 logit을 합치고 sigmoid를 적용해 최종 예측
         final_logits = att_score + mlp_score
         y_pred = tf.nn.sigmoid(final_logits)
-        
+
         return y_pred
-    
-# ==============================================================================
-# 5. Evaluation Utilities
-# ==============================================================================
+
+
+# Evaluation Utilities
 def get_hit_rate(ranklist, y_true):
-    """
-    Calculates Hit Rate@K using set intersection for O(1) lookups.
-    """
+    """set 교집합으로 Hit Rate@K를 계산한다."""
     hits = set(ranklist).intersection(set(y_true))
     return len(hits) / len(y_true) if len(y_true) > 0 else 0.0
 
 def get_NDCG(ranklist, y_true):
-    """
-    Calculates Normalized Discounted Cumulative Gain (NDCG@K) using standard log2.
-    """
+    """log2 기반으로 NDCG@K(Normalized Discounted Cumulative Gain)를 계산한다."""
     dcg = 0.0
     idcg = 0.0
-    
-    # Calculate DCG (Discounted Cumulative Gain)
+
+    # DCG(Discounted Cumulative Gain) 계산
     for i, item in enumerate(ranklist):
         if item in y_true:
             dcg += 1.0 / np.log2(i + 2)
-            
-    # Calculate IDCG (Ideal DCG)
+
+    # IDCG(Ideal DCG) 계산
     for i in range(min(len(y_true), len(ranklist))):
         idcg += 1.0 / np.log2(i + 2)
-        
+
     return round((dcg / idcg), 5) if idcg > 0 else 0.0
 
 def test_model(model, test_df, batch_size=2048):
-    """
-    Generates predictions natively using Keras batching and Pandas groupby.
-    """
-    # 1. Extract features and IDs
+    """Keras batch 예측과 pandas groupby로 user별 예측 결과를 생성한다."""
+    # feature와 ID 추출
     features = test_df.iloc[:, :-1].values
     user_ids = test_df['user_id'].astype(int).values
     item_ids = test_df['movie_id'].astype(int).values
 
-    # 2. Native Keras batched prediction 
+    # Keras batch 예측
     preds = model.predict(features, batch_size=batch_size, verbose=0).flatten()
 
-    # 3. Create a DataFrame for fast operations
+    # 빠른 연산을 위해 DataFrame 구성
     results_df = pd.DataFrame({
         'user_id': user_ids,
         'movie_id': item_ids,
         'pred': preds
     })
 
-    # 4. Group by user_id efficiently using Pandas C-engine
+    # user_id 기준 groupby
     user_pred_info = results_df.groupby('user_id').apply(
         lambda x: list(zip(x['movie_id'], x['pred']))
     ).to_dict()
